@@ -1,13 +1,13 @@
 <html>
   <head>
-
-<link href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.8/themes/base/jquery-ui.css" rel="stylesheet" type="text/css"/>
+    <link href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.8/themes/base/jquery-ui.css" rel="stylesheet" type="text/css"/>
     <link href="css/ui-lightness/jquery-ui-1.10.0.custom.css" rel="stylesheet">
     <script type="text/javascript" src="js/merge.sorter.js"></script>
     <script type="text/javascript" src="js/selection.sorter.js"></script>
     <script type="text/javascript" src="js/jquery-1.9.0.js"></script>
     <script type="text/javascript" src="js/jquery-ui-1.10.0.custom.js"></script>
     <script type="text/javascript" src="js/util.js"></script>
+
     <script type="text/javascript">
       var ss = new SelectionSorter();
       var ms = new MergeSorter();
@@ -16,6 +16,7 @@
       var max_number = 10000;
       var merge_results = [];
       var selection_results = [];
+      var threads = 0;
 
       var graphData =[
         { label: "MergeSort",data : merge_results },
@@ -26,41 +27,38 @@
       var selection_worker = new Worker('js/selection.worker.js');
       var return_count = 0;
       var expected_results = Math.floor(max_element_count / element_count_step) * 2;
-      // var merge_times = [];
-      // var select_times = [];
 
-      // var merge_time = function(the_array){
-      //   return time_this(function(){return ms.sort(the_array)});
-      // }
+      var $progressBar, $thread_count;
 
-      // var select_time = function(the_array){
-      //   return time_this(function(){return ss.sort(the_array)});
-      // }
+      var add_thread = function(){
+        threads++;
+        $thread_count.html(threads);
+      }
 
-      // var verify_merge = function(the_array){
-      //   return verify_sort(ms.sort(the_array));
-      // }
-
-      // var verify_select = function(the_array){
-      //   return verify_sort(ss.sort(the_array));
-      // }
-var $progressBar, $percent;
+      var remove_thread = function(){
+        threads--;
+        $thread_count.html(threads);
+      }
 
       var update_return_counter = function(){
+        remove_thread();
         return_count++;
-          $progressBar.progressbar({
-            value: ((return_count/expected_results) * 100)
-          });
+        $progressBar.progressbar({
+          value: ((return_count/expected_results) * 100)
+        });
 
-          if (return_count == expected_results){
-            console.log("Done");
-          }
+        if (return_count == expected_results){
+          console.log("Done");
+          $progressBar.hide();
+          $thread_count.parent().hide();
+        }
       }
 
       $(function(){
 
-        $progressBar = $( "#progressBar" );
-        $percent = $( "#percent" );
+        $progressBar = $("#progressBar");
+        $thread_count = $("#thread_count");
+        $progressBar.show();
 
         merge_worker.addEventListener('message', function(e) {
           merge_results[e.data.pos] = [e.data.elements, e.data.time];
@@ -72,34 +70,12 @@ var $progressBar, $percent;
           update_return_counter();
         }, false);
 
-        // var time_for_elements = function(element_count){
-        //   var select_input = [];
-        //   var merge_input = [];
-        //   var result = {
-        //     select_time: 0,
-        //     merge_time: 0,
-        //     elements: element_count
-        //   }
-
-        //   for (var i = 0; i < element_count; i++){
-        //     var val = Math.floor((Math.random()*max_number)+1);
-        //     // select_input.push(val);
-        //     merge_input.push(val);
-        //   }
-
-        //   merge_worker.postMessage(merge_input);
-        //   selection_worker.postMessage(merge_input);
-
-        // }
-
-        // $progressBar.show();
         var element_pos = 0;
         for(var e = 1; e < max_element_count; e = (e + element_count_step)){
           var merge_input = [];
 
           for (var i = 0; i < e; i++){
             var val = Math.floor((Math.random()*max_number)+1);
-            // select_input.push(val);
             merge_input.push(val);
           }
 
@@ -110,34 +86,18 @@ var $progressBar, $percent;
           }
 
           merge_worker.postMessage(payload);
+          add_thread();
           selection_worker.postMessage(payload);
+          add_thread();
           element_pos++;
-
-
-          // results.push(time_for_elements(e))
-          // time_for_elements(e)
-          // i++;
-          // $progressBar.progressbar({
-          //   value: ((e/max_element_count) * 100)
-          // });
-
-          // $percent.html((e/max_element_count) * 100);
-
         }
-
-
-
-
-        // $progressBar.hide();
-
-
       });
 
     </script>
 
 </head><body>
     <div id="progressBar"></div>
-    <div id="percent"></div>
+    <div>Threads running: <span id="thread_count" /></div>
     <div>Charts will go here</div>
     <div id="placeholder" style="width:600px;height:300px"></div>
   </body>
