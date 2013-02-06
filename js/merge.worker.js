@@ -8,11 +8,13 @@ self.addEventListener('message', function(e) {
   var pos = input.pos;
   var elements = input.elements;
 
-  var timing = self.do_sort(input_array);
+  var result = self.do_sort(input_array);
+
   var payload= {
-    time: timing,
+    time: result.time,
     pos: pos,
-    elements: elements
+    elements: elements,
+    sorted_elements: result.sorted
   }
 
   self.postMessage(payload);
@@ -23,7 +25,15 @@ self.addEventListener('message', function(e) {
 self.do_sort = function(input_array){
   // console.log(input_array);
   var ms = new MergeSorter();
-  var time = time_this(function(){return ms.sort(input_array)});
-  return time;
+  var sorted;
+  var time = time_this(function(){
+    sorted = ms.sort(input_array);
+    return sorted}
+    );
+
+  return {
+          time: time,
+          sorted: sorted
+        };
 }
 

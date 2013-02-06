@@ -1,34 +1,50 @@
-<html>
+<!DOCTYPE html>
+<html lang="en">
   <head>
     <link href="http://ajax.googleapis.com/ajax/libs/jqueryui/1.8/themes/base/jquery-ui.css" rel="stylesheet" type="text/css"/>
     <link href="css/ui-lightness/jquery-ui-1.10.0.custom.css" rel="stylesheet">
+    <link href="css/bootstrap.css" rel="stylesheet">
     <script type="text/javascript" src="js/merge.sorter.js"></script>
     <script type="text/javascript" src="js/selection.sorter.js"></script>
     <script type="text/javascript" src="js/jquery-1.9.0.js"></script>
     <script type="text/javascript" src="js/jquery-ui-1.10.0.custom.js"></script>
     <script type="text/javascript" src="js/util.js"></script>
+    <script type="text/javascript" src="js/flot/jquery.flot.js"></script>
+    <script type="text/javascript" src="js/bootstrap.js"></script>
 
     <script type="text/javascript">
-      var ss = new SelectionSorter();
-      var ms = new MergeSorter();
-      var max_element_count = 10000;
-      var element_count_step = 20;
+      var max_element_count = 500;
+      var element_count_step = 100;
       var max_number = 10000;
+      var min_number = 1;
+      var use_sorted = false;
+
       var merge_results = [];
       var selection_results = [];
+      var sorted_merge_results = [];
+      var sorted_selection_results = [];
       var threads = 0;
 
       var graphData =[
-        { label: "MergeSort",data : merge_results },
-        { label: "SelectionSort",data : selection_results },
-      ]
+        { label: "MergeSort",data : merge_results, clickable: true, hoverable: true },
+        { label: "SelectionSort",data : selection_results, clickable: true, hoverable: true  },
+      ];
+
+      var graphOptions = {
+        series: {
+          lines: { show: true },
+          points: { show: true }
+        }
+      };
 
       var merge_worker = new Worker('js/merge.worker.js');
+      var sorted_merge_worker = new Worker('js/merge.worker.js');
       var selection_worker = new Worker('js/selection.worker.js');
+      var sorted_selection_worker = new Worker('js/selection.worker.js');
       var return_count = 0;
       var expected_results = Math.floor(max_element_count / element_count_step) * 2;
 
-      var $progressBar, $thread_count;
+      var $progressBar, $thread_count, $placeholder, $status;
 
       var add_thread = function(){
         threads++;
@@ -48,34 +64,26 @@
         });
 
         if (return_count == expected_results){
-          console.log("Done");
-          $progressBar.hide();
-          $thread_count.parent().hide();
+          $status.hide();
+          $.plot($placeholder, graphData, graphOptions);
+          $("button").removeClass("disabled");
         }
       }
 
-      $(function(){
-
-        $progressBar = $("#progressBar");
-        $thread_count = $("#thread_count");
-        $progressBar.show();
-
-        merge_worker.addEventListener('message', function(e) {
-          merge_results[e.data.pos] = [e.data.elements, e.data.time];
-          update_return_counter();
-        }, false);
-
-        selection_worker.addEventListener('message', function(e) {
-          selection_results[e.data.pos] = [e.data.elements, e.data.time];
-          update_return_counter();
-        }, false);
-
+      var run_test = function(){
+        $("button").addClass("disabled");
+        $status.show();
         var element_pos = 0;
+        var rand_base = max_number - min_number;
         for(var e = 1; e < max_element_count; e = (e + element_count_step)){
           var merge_input = [];
-
           for (var i = 0; i < e; i++){
-            var val = Math.floor((Math.random()*max_number)+1);
+            var val;
+            // if(use_sorted){
+            //   val = i;
+            // } else {
+            val = Math.floor((Math.random()*rand_base)+min_number);
+            // }
             merge_input.push(val);
           }
 
@@ -91,15 +99,132 @@
           add_thread();
           element_pos++;
         }
+      };
+
+      $(function(){
+
+        $progressBar = $("#progressBar");
+        $thread_count = $("#thread_count");
+        $placeholder = $("#placeholder");
+        $status = $("#status");
+        $.plot($placeholder, graphData, graphOptions);
+
+        merge_worker.addEventListener('message', function(e) {
+          console.log(e);
+          merge_results[e.data.pos] = [e.data.elements, e.data.time];
+          update_return_counter();
+          if(use_sorted){
+            var payload = {
+              data: e.data.sorted_elements,
+              pos: e.data.pos,
+              elements: e.data.elements
+            }
+
+            sorted_merge_worker.postMessage(payload);
+            add_thread();
+          }
+        }, false);
+
+        selection_worker.addEventListener('message', function(e) {
+          selection_results[e.data.pos] = [e.data.elements, e.data.time];
+          update_return_counter();
+          if(use_sorted){
+            var payload = {
+              data: e.data.sorted_elements,
+              pos: e.data.pos,
+              elements: e.data.elements
+            }
+
+            sorted_selection_worker.postMessage(payload);
+            add_thread();
+          }
+        }, false);
+
+        sorted_merge_worker.addEventListener('message', function(e) {
+          sorted_merge_results[e.data.pos] = [e.data.elements, e.data.time];
+          update_return_counter();
+        }, false);
+
+        sorted_selection_worker.addEventListener('message', function(e) {
+          sorted_selection_results[e.data.pos] = [e.data.elements, e.data.time];
+          update_return_counter();
+        }, false);
+
+        $("button").click(function(e){
+          e.preventDefault();
+          if( !$(this).hasClass("disabled")){
+            max_element_count = parseInt($("#inputMaxElements").val());
+            element_count_step = parseInt($("#inputStep").val());
+            max_number = parseInt($("#inputRangeMax").val());
+            min_number = parseInt($("#inputRangeMin").val());
+            use_sorted = $("#inputSorted").prop("checked");
+            merge_results = [];
+            selection_results = [];
+            sorted_merge_results = [];
+            sorted_selection_results = [];
+
+            return_count = 0;
+
+            expected_results = Math.floor(max_element_count / element_count_step) * 2;
+
+            graphData =[
+              { label: "MergeSort", data : merge_results},
+              { label: "SelectionSort", data : selection_results}
+            ];
+
+            if(use_sorted){
+              expected_results = expected_results * 2;
+              graphData.push({ label: "SortedMergeSort", data : sorted_merge_results});
+              graphData.push({ label: "SortedSelectionSort", data : sorted_selection_results});
+            }
+
+
+            $.plot($placeholder, graphData, graphOptions);
+
+            run_test();
+          }
+        })
+
       });
 
     </script>
-
-</head><body>
-    <div id="progressBar"></div>
-    <div>Threads running: <span id="thread_count" /></div>
-    <div>Charts will go here</div>
-    <div id="placeholder" style="width:600px;height:300px"></div>
+  </head>
+  <body>
+    <div class="container" style="margin-top:20px;">
+      <div id="status" style="display:none; margin-bottom:10px;">
+        <div id="progressBar"></div>
+        Threads running: <span id="thread_count" />
+      </div>
+      <div id="placeholder" style="width:940px;height:500px"></div>
+      <form class="form-horizontal">
+        <div class="control-group">
+          <label class="control-label" for="inputMaxElements">Max Elements</label>
+          <div class="controls">
+            <input type="text" id="inputMaxElements" placeholder="10,000"  class="input-small">
+          </div>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="inputStep">Step between tests</label>
+          <div class="controls">
+            <input type="text" id="inputStep" placeholder="500"  class="input-small">
+          </div>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="inputSorted">Use Sorted</label>
+          <div class="controls">
+            <input type="checkbox" id="inputSorted">
+          </div>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="inputRangeMax">Random Number Range</label>
+          <div class="controls">
+            <input type="text" id="inputRangeMin" placeholder="1" class="input-small"> -
+            <input type="text" id="inputRangeMax" placeholder="10000" class="input-small">
+          </div>
+          <button class="btn btn-primary btn-large"><i class="icon-random icon-white"></i> Go!</button>
+        </div>
+      </form>
+    </div>
   </body>
 </html>
 
