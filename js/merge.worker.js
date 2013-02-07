@@ -7,8 +7,9 @@ self.addEventListener('message', function(e) {
   var input_array = input.data;
   var pos = input.pos;
   var elements = input.elements;
+  var verify_sort = input.verify_sort;
 
-  var result = self.do_sort(input_array);
+  var result = self.do_sort(input_array, verify_sort);
 
   var payload= {
     time: result.time,
@@ -18,17 +19,18 @@ self.addEventListener('message', function(e) {
   }
 
   self.postMessage(payload);
+
 }, false);
 
 
 
-self.do_sort = function(input_array){
+self.do_sort = function(input_array, verify_sort){
   // console.log(input_array);
   var ms = new MergeSorter();
   var sorted;
   var time = time_this(function(){
     sorted = ms.sort(input_array);
-    return sorted}
+    return sorted}, verify_sort
     );
 
   return {

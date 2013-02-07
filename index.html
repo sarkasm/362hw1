@@ -10,30 +10,46 @@
     <script type="text/javascript" src="js/jquery-ui-1.10.0.custom.js"></script>
     <script type="text/javascript" src="js/util.js"></script>
     <script type="text/javascript" src="js/flot/jquery.flot.js"></script>
+    <script type="text/javascript" src="js/flot/jquery.flot.crosshair.js"></script>
     <script type="text/javascript" src="js/bootstrap.js"></script>
-
+    <style>
+      .form-horizontal .control-group {
+        margin-bottom: 10px;
+      }
+    </style>
     <script type="text/javascript">
-      var max_element_count = 500;
-      var element_count_step = 100;
+      var STRING_LENGTH = 20;
+
+      var max_element_count = 10000;
+      var element_count_step = 500;
       var max_number = 10000;
       var min_number = 1;
       var use_sorted = false;
+      var use_strings = false;
 
       var merge_results = [];
       var selection_results = [];
       var sorted_merge_results = [];
       var sorted_selection_results = [];
       var threads = 0;
+      var start_time = 0;
+      var end_time = 0;
+      var verify_sort = false;
 
       var graphData =[
-        { label: "MergeSort",data : merge_results, clickable: true, hoverable: true },
-        { label: "SelectionSort",data : selection_results, clickable: true, hoverable: true  },
+        { label: "MergeSort : 0.00",data : merge_results, clickable: true, hoverable: true },
+        { label: "SelectionSort : 0.00",data : selection_results, clickable: true, hoverable: true  },
       ];
 
       var graphOptions = {
         series: {
           lines: { show: true },
           points: { show: true }
+        },
+        crosshair: { mode: "x" },
+        grid: { hoverable: true, autoHighlight: false },
+        legend: {
+          position: "nw"
         }
       };
 
@@ -41,10 +57,51 @@
       var sorted_merge_worker = new Worker('js/merge.worker.js');
       var selection_worker = new Worker('js/selection.worker.js');
       var sorted_selection_worker = new Worker('js/selection.worker.js');
-      var return_count = 0;
-      var expected_results = Math.floor(max_element_count / element_count_step) * 2;
 
-      var $progressBar, $thread_count, $placeholder, $status;
+      merge_worker.addEventListener('message', function(e) {
+        merge_results[e.data.pos] = [e.data.elements, e.data.time];
+        update_return_counter();
+        if(use_sorted){
+          var payload = {
+            data: e.data.sorted_elements,
+            pos: e.data.pos,
+            elements: e.data.elements,
+            verify_sort: verify_sort
+          }
+
+          sorted_merge_worker.postMessage(payload);
+          add_thread();
+        }
+      }, false);
+
+      selection_worker.addEventListener('message', function(e) {
+        selection_results[e.data.pos] = [e.data.elements, e.data.time];
+        update_return_counter();
+        if(use_sorted){
+          var payload = {
+            data: e.data.sorted_elements,
+            pos: e.data.pos,
+            elements: e.data.elements,
+            verify_sort: verify_sort
+          }
+
+          sorted_selection_worker.postMessage(payload);
+          add_thread();
+        }
+      }, false);
+
+      sorted_merge_worker.addEventListener('message', function(e) {
+        sorted_merge_results[e.data.pos] = [e.data.elements, e.data.time];
+        update_return_counter();
+      }, false);
+
+      sorted_selection_worker.addEventListener('message', function(e) {
+        sorted_selection_results[e.data.pos] = [e.data.elements, e.data.time];
+        update_return_counter();
+      }, false);
+
+      var return_count, expected_results;
+      var $progressBar, $thread_count, $placeholder, $status, $plot, $legends;
 
       var add_thread = function(){
         threads++;
@@ -64,33 +121,56 @@
         });
 
         if (return_count == expected_results){
+          end_time = new Date().getTime();
           $status.hide();
-          $.plot($placeholder, graphData, graphOptions);
+          $("#time_spent").html(end_time - start_time);
+          $("#total_time").show();
+
+          $plot = $.plot($placeholder, graphData, graphOptions);
+          $legends = $("#placeholder .legendLabel");
+          $legends.each(function () {
+                $(this).css('width', 275);
+          });
           $("button").removeClass("disabled");
+        }
+      }
+
+      var choose_element_value = function(){
+        if(use_strings){
+          tmp = "";
+          for(var i = 0; i < STRING_LENGTH; i++){
+            var n= Math.floor(Math.random()*26) + 97;
+            if(n > 122)
+              n = 122;
+            tmp += String.fromCharCode(n);
+          }
+          return tmp;
+
+        } else {
+          var rand_base = max_number - min_number;
+          return Math.floor((Math.random()*rand_base)+min_number)
         }
       }
 
       var run_test = function(){
         $("button").addClass("disabled");
         $status.show();
+        $("#total_time").hide();
+        start_time = new Date().getTime();
+
         var element_pos = 0;
-        var rand_base = max_number - min_number;
         for(var e = 1; e < max_element_count; e = (e + element_count_step)){
           var merge_input = [];
+
           for (var i = 0; i < e; i++){
-            var val;
-            // if(use_sorted){
-            //   val = i;
-            // } else {
-            val = Math.floor((Math.random()*rand_base)+min_number);
-            // }
-            merge_input.push(val);
+            merge_input.push(choose_element_value());
           }
 
           payload = {
             data: merge_input,
             pos: element_pos,
-            elements: e
+            elements: e,
+            verify_sort: verify_sort
           }
 
           merge_worker.postMessage(payload);
@@ -101,54 +181,80 @@
         }
       };
 
+    var updateLegendTimeout = null;
+    var latestPosition = null;
+
+
+    // UpdateLegend used from the flot example:
+    // js/flot/examples/tracking.html
+    function updateLegend() {
+      updateLegendTimeout = null;
+
+      if (typeof $legends == 'undefined'){
+        return;
+      }
+
+      var pos = latestPosition;
+
+      var axes = $plot.getAxes();
+
+      if (pos.x < axes.xaxis.min || pos.x > axes.xaxis.max ||
+        pos.y < axes.yaxis.min || pos.y > axes.yaxis.max)
+        return;
+
+      var i, j, dataset = $plot.getData();
+
+      for (i = 0; i < dataset.length; ++i) {
+        var series = dataset[i];
+
+        // find the nearest points, x-wise
+        for (j = 0; j < series.data.length; ++j)
+            if (series.data[j][0] > pos.x)
+                break;
+
+        // now interpolate
+        var x, y, p1 = series.data[j - 1], p2 = series.data[j];
+        if (p1 == null){
+            x = p2[0];
+            y = p2[1];
+        }
+        else if (p2 == null){
+            x = p1[0];
+            y = p1[1];
+        }
+        else {
+            x = p1[0] + (p2[0] - p1[0]) * (pos.x - p1[0]) / (p2[0] - p1[0]);
+            y = p1[1] + (p2[1] - p1[1]) * (pos.x - p1[0]) / (p2[0] - p1[0]);
+        }
+
+        $legends.eq(i).text(series.label.replace(/:.*/, ": " + y.toFixed(2) + "ms"));
+        // $legends.eq(i).text(series.label.replace(/:.*/, ": " + x.toFixed(0) + " elements, " + y.toFixed(2) + "ms"));
+      }
+    }
+
+
       $(function(){
 
         $progressBar = $("#progressBar");
         $thread_count = $("#thread_count");
         $placeholder = $("#placeholder");
         $status = $("#status");
-        $.plot($placeholder, graphData, graphOptions);
+        $plot = $.plot($placeholder, graphData, graphOptions);
 
-        merge_worker.addEventListener('message', function(e) {
-          console.log(e);
-          merge_results[e.data.pos] = [e.data.elements, e.data.time];
-          update_return_counter();
-          if(use_sorted){
-            var payload = {
-              data: e.data.sorted_elements,
-              pos: e.data.pos,
-              elements: e.data.elements
-            }
+        $("#inputMaxElements").val(max_element_count);
+        $("#inputStep").val(element_count_step);
+        $("#inputRangeMax").val(max_number)
+        $("#inputRangeMin").val(min_number);
+        $("#inputSorted").prop("checked", use_sorted);
+        $("#inputStrings").prop("checked", use_strings);
+        $("#inputVerify").prop("checked", verify_sort);
 
-            sorted_merge_worker.postMessage(payload);
-            add_thread();
-          }
-        }, false);
+        $placeholder.bind("plothover",  function (event, pos, item) {
+            latestPosition = pos;
+            if (!updateLegendTimeout)
+                updateLegendTimeout = setTimeout(updateLegend, 50);
+        });
 
-        selection_worker.addEventListener('message', function(e) {
-          selection_results[e.data.pos] = [e.data.elements, e.data.time];
-          update_return_counter();
-          if(use_sorted){
-            var payload = {
-              data: e.data.sorted_elements,
-              pos: e.data.pos,
-              elements: e.data.elements
-            }
-
-            sorted_selection_worker.postMessage(payload);
-            add_thread();
-          }
-        }, false);
-
-        sorted_merge_worker.addEventListener('message', function(e) {
-          sorted_merge_results[e.data.pos] = [e.data.elements, e.data.time];
-          update_return_counter();
-        }, false);
-
-        sorted_selection_worker.addEventListener('message', function(e) {
-          sorted_selection_results[e.data.pos] = [e.data.elements, e.data.time];
-          update_return_counter();
-        }, false);
 
         $("button").click(function(e){
           e.preventDefault();
@@ -158,32 +264,42 @@
             max_number = parseInt($("#inputRangeMax").val());
             min_number = parseInt($("#inputRangeMin").val());
             use_sorted = $("#inputSorted").prop("checked");
+            use_strings = $("#inputStrings").prop("checked");
+            verify_sort = $("#inputVerify").prop("checked");
+
             merge_results = [];
             selection_results = [];
             sorted_merge_results = [];
             sorted_selection_results = [];
 
             return_count = 0;
-
             expected_results = Math.floor(max_element_count / element_count_step) * 2;
 
             graphData =[
-              { label: "MergeSort", data : merge_results},
-              { label: "SelectionSort", data : selection_results}
+              { label: "MergeSort : 0.00", data : merge_results},
+              { label: "SelectionSort : 0.00", data : selection_results}
             ];
 
             if(use_sorted){
               expected_results = expected_results * 2;
-              graphData.push({ label: "SortedMergeSort", data : sorted_merge_results});
-              graphData.push({ label: "SortedSelectionSort", data : sorted_selection_results});
+              graphData.push({ label: "SortedMergeSort : 0.00", data : sorted_merge_results});
+              graphData.push({ label: "SortedSelectionSort : 0.00", data : sorted_selection_results});
             }
 
 
-            $.plot($placeholder, graphData, graphOptions);
+            $plot = $.plot($placeholder, graphData, graphOptions);
 
             run_test();
           }
         })
+
+        $('#inputStrings').change(function() {
+          if($(this).prop("checked")){
+            $("#inputRangeControlGroup").hide();
+          } else {
+            $("#inputRangeControlGroup").show();
+          }
+        });
 
       });
 
@@ -191,22 +307,25 @@
   </head>
   <body>
     <div class="container" style="margin-top:20px;">
+      <div id="total_time" style="display:none; margin-bottom:10px;">
+        Total Time: <span id="time_spent"></span>ms.
+      </div>
       <div id="status" style="display:none; margin-bottom:10px;">
         <div id="progressBar"></div>
-        Threads running: <span id="thread_count" />
+        Sorts in flight: <span id="thread_count" />
       </div>
       <div id="placeholder" style="width:940px;height:500px"></div>
       <form class="form-horizontal">
         <div class="control-group">
           <label class="control-label" for="inputMaxElements">Max Elements</label>
           <div class="controls">
-            <input type="text" id="inputMaxElements" placeholder="10,000"  class="input-small">
+            <input type="text" id="inputMaxElements" class="input-small">
           </div>
         </div>
         <div class="control-group">
           <label class="control-label" for="inputStep">Step between tests</label>
           <div class="controls">
-            <input type="text" id="inputStep" placeholder="500"  class="input-small">
+            <input type="text" id="inputStep" class="input-small">
           </div>
         </div>
         <div class="control-group">
@@ -216,13 +335,25 @@
           </div>
         </div>
         <div class="control-group">
+          <label class="control-label" for="inputStrings">Use Strings</label>
+          <div class="controls">
+            <input type="checkbox" id="inputStrings">
+          </div>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="inputVerify">Verify Sorts</label>
+          <div class="controls">
+            <input type="checkbox" id="inputVerify">
+          </div>
+        </div>
+        <div class="control-group" id="inputRangeControlGroup">
           <label class="control-label" for="inputRangeMax">Random Number Range</label>
           <div class="controls">
-            <input type="text" id="inputRangeMin" placeholder="1" class="input-small"> -
-            <input type="text" id="inputRangeMax" placeholder="10000" class="input-small">
+            <input type="text" id="inputRangeMin" class="input-small"> -
+            <input type="text" id="inputRangeMax" class="input-small">
           </div>
-          <button class="btn btn-primary btn-large"><i class="icon-random icon-white"></i> Go!</button>
         </div>
+        <button class="btn btn-primary btn-large"><i class="icon-random icon-white"></i> Go!</button>
       </form>
     </div>
   </body>

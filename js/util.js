@@ -1,10 +1,9 @@
-var time_this = function(cb){
+var time_this = function(cb, do_verify){
     var time_start = new Date().getTime();
     var result = cb();
     var time_diff = new Date().getTime() - time_start;
-    if(!verify_sort(result)){
-      console.log("FAILED ON SORT.");
-      console.log(result.length);
+    if(do_verify && !verify_sort(result)){
+      throw "SORT FAILED!";
     }
     return time_diff;
 };
