@@ -116,17 +116,18 @@
       var update_return_counter = function(){
         remove_thread();
         return_count++;
+
         $progressBar.progressbar({
           value: ((return_count/expected_results) * 100)
         });
 
+        $plot = $.plot($placeholder, graphData, graphOptions);
         if (return_count == expected_results){
           end_time = new Date().getTime();
           $status.hide();
           $("#time_spent").html(end_time - start_time);
           $("#total_time").show();
 
-          $plot = $.plot($placeholder, graphData, graphOptions);
           $legends = $("#placeholder .legendLabel");
           $legends.each(function () {
                 $(this).css('width', 275);
@@ -159,7 +160,8 @@
         start_time = new Date().getTime();
 
         var element_pos = 0;
-        for(var e = 1; e < max_element_count; e = (e + element_count_step)){
+
+        function addTest(size){
           var merge_input = [];
 
           for (var i = 0; i < e; i++){
@@ -179,6 +181,16 @@
           add_thread();
           element_pos++;
         }
+
+        addTest(1);
+
+        var e = 0;
+        while((e += element_count_step) < max_element_count){
+          addTest(e);
+        }
+
+        addTest(max_element_count);
+
       };
 
     var updateLegendTimeout = null;
@@ -227,7 +239,7 @@
             y = p1[1] + (p2[1] - p1[1]) * (pos.x - p1[0]) / (p2[0] - p1[0]);
         }
 
-        $legends.eq(i).text(series.label.replace(/:.*/, ": " + y.toFixed(2) + "ms"));
+        $legends.eq(i).text(series.label.replace(/:.*/, ": " + y.toFixed(3) + "ms"));
         // $legends.eq(i).text(series.label.replace(/:.*/, ": " + x.toFixed(0) + " elements, " + y.toFixed(2) + "ms"));
       }
     }
@@ -273,7 +285,7 @@
             sorted_selection_results = [];
 
             return_count = 0;
-            expected_results = Math.floor(max_element_count / element_count_step) * 2;
+            expected_results = (Math.ceil(max_element_count / element_count_step) + 1) * 2
 
             graphData =[
               { label: "MergeSort : 0.00", data : merge_results},
@@ -285,7 +297,6 @@
               graphData.push({ label: "SortedMergeSort : 0.00", data : sorted_merge_results});
               graphData.push({ label: "SortedSelectionSort : 0.00", data : sorted_selection_results});
             }
-
 
             $plot = $.plot($placeholder, graphData, graphOptions);
 
