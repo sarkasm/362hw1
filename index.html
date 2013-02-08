@@ -122,6 +122,7 @@
         });
 
         $plot = $.plot($placeholder, graphData, graphOptions);
+        $element_id = $("#element_id");
         if (return_count == expected_results){
           end_time = new Date().getTime();
           $status.hide();
@@ -130,7 +131,7 @@
 
           $legends = $("#placeholder .legendLabel");
           $legends.each(function () {
-                $(this).css('width', 275);
+                $(this).css('width', 475);
           });
           $("button").removeClass("disabled");
         }
@@ -164,14 +165,14 @@
         function addTest(size){
           var merge_input = [];
 
-          for (var i = 0; i < e; i++){
+          for (var i = 0; i < size; i++){
             merge_input.push(choose_element_value());
           }
 
           payload = {
             data: merge_input,
             pos: element_pos,
-            elements: e,
+            elements: size,
             verify_sort: verify_sort
           }
 
@@ -183,7 +184,6 @@
         }
 
         addTest(1);
-
         var e = 0;
         while((e += element_count_step) < max_element_count){
           addTest(e);
@@ -225,21 +225,31 @@
                 break;
 
         // now interpolate
-        var x, y, p1 = series.data[j - 1], p2 = series.data[j];
+        var x, y, ex_x, ex_y, p1 = series.data[j - 1], p2 = series.data[j];
         if (p1 == null){
-            x = p2[0];
-            y = p2[1];
+            ex_x = x = p2[0];
+            ex_y = y = p2[1];
         }
         else if (p2 == null){
-            x = p1[0];
-            y = p1[1];
+            ex_x = x = p1[0];
+            ex_y = y = p1[1];
         }
         else {
             x = p1[0] + (p2[0] - p1[0]) * (pos.x - p1[0]) / (p2[0] - p1[0]);
             y = p1[1] + (p2[1] - p1[1]) * (pos.x - p1[0]) / (p2[0] - p1[0]);
+
+            if ((pos.x - p1[0]) < (p2[0] - pos.x)){
+              ex_x = p1[0];
+              ex_y = p1[1]
+            } else {
+              ex_x = p2[0];
+              ex_y = p2[1]
+            }
+
         }
 
-        $legends.eq(i).text(series.label.replace(/:.*/, ": " + y.toFixed(3) + "ms"));
+        $legends.eq(i).text(series.label.replace(/:.*/, ": " + y.toFixed(2) + "ms (Nearest Exact: " + ex_y.toFixed(0) + "ms)"));
+        $element_id.html( "" + x.toFixed(0) + " (Nearest Exact: " + ex_x.toFixed(0) + ")");
         // $legends.eq(i).text(series.label.replace(/:.*/, ": " + x.toFixed(0) + " elements, " + y.toFixed(2) + "ms"));
       }
     }
@@ -319,7 +329,8 @@
   <body>
     <div class="container" style="margin-top:20px;">
       <div id="total_time" style="display:none; margin-bottom:10px;">
-        Total Time: <span id="time_spent"></span>ms.
+        Total Time: <span id="time_spent"></span>ms.&nbsp;&nbsp;&nbsp;
+        Elements: <span id="element_id"></span>
       </div>
       <div id="status" style="display:none; margin-bottom:10px;">
         <div id="progressBar"></div>
