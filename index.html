@@ -18,7 +18,6 @@
       }
     </style>
     <script type="text/javascript">
-      var STRING_LENGTH = 20;
 
       var max_element_count = 10000;
       var element_count_step = 500;
@@ -26,6 +25,10 @@
       var min_number = 1;
       var use_sorted = false;
       var use_strings = false;
+      var string_length = 20;
+
+      var do_merge_sort = true;
+      var do_selection_sort = true;
 
       var merge_results = [];
       var selection_results = [];
@@ -140,7 +143,7 @@
       var choose_element_value = function(){
         if(use_strings){
           tmp = "";
-          for(var i = 0; i < STRING_LENGTH; i++){
+          for(var i = 0; i < string_length; i++){
             var n= Math.floor(Math.random()*26) + 97;
             if(n > 122)
               n = 122;
@@ -176,10 +179,15 @@
             verify_sort: verify_sort
           }
 
-          merge_worker.postMessage(payload);
-          add_thread();
-          selection_worker.postMessage(payload);
-          add_thread();
+          if(do_merge_sort){
+            merge_worker.postMessage(payload);
+            add_thread();
+          }
+
+          if(do_selection_sort){
+            selection_worker.postMessage(payload);
+            add_thread();
+          }
           element_pos++;
         }
 
@@ -270,6 +278,18 @@
         $("#inputSorted").prop("checked", use_sorted);
         $("#inputStrings").prop("checked", use_strings);
         $("#inputVerify").prop("checked", verify_sort);
+        $("#inputMergeSort").prop("checked", do_merge_sort);
+        $("#inputSelectionSort").prop("checked", do_selection_sort);
+        $("#inputStringSize").val(string_length)
+
+        if($("#inputStrings").prop("checked")){
+          $("#inputRangeControlGroup").hide();
+          $("#inputStringSizeControlGroup").show();
+        } else {
+          $("#inputRangeControlGroup").show();
+          $("#inputStringSizeControlGroup").hide();
+        }
+
 
         $placeholder.bind("plothover",  function (event, pos, item) {
             latestPosition = pos;
@@ -288,6 +308,9 @@
             use_sorted = $("#inputSorted").prop("checked");
             use_strings = $("#inputStrings").prop("checked");
             verify_sort = $("#inputVerify").prop("checked");
+            do_merge_sort = $("#inputMergeSort").prop("checked");
+            do_selection_sort = $("#inputSelectionSort").prop("checked");
+            string_length = $("#inputStringSize").val()
 
             merge_results = [];
             selection_results = [];
@@ -295,17 +318,28 @@
             sorted_selection_results = [];
 
             return_count = 0;
-            expected_results = (Math.ceil(max_element_count / element_count_step) + 1) * 2
 
-            graphData =[
-              { label: "MergeSort : 0.00", data : merge_results},
-              { label: "SelectionSort : 0.00", data : selection_results}
-            ];
+            sort_type_count = (do_merge_sort ? 1 : 0) + (do_selection_sort ? 1 : 0)
+
+            expected_results = (Math.ceil(max_element_count / element_count_step) + 1) * sort_type_count
+
+            graphData =[];
+
+            if(do_merge_sort){
+              graphData.push({ label: "MergeSort : 0.00", data : merge_results});
+            }
+            if(do_selection_sort){
+              graphData.push({ label: "SelectionSort : 0.00", data : selection_results});
+            }
 
             if(use_sorted){
               expected_results = expected_results * 2;
-              graphData.push({ label: "SortedMergeSort : 0.00", data : sorted_merge_results});
-              graphData.push({ label: "SortedSelectionSort : 0.00", data : sorted_selection_results});
+              if(do_merge_sort){
+                graphData.push({ label: "SortedMergeSort : 0.00", data : sorted_merge_results});
+              }
+              if(do_selection_sort){
+                graphData.push({ label: "SortedSelectionSort : 0.00", data : sorted_selection_results});
+              }
             }
 
             $plot = $.plot($placeholder, graphData, graphOptions);
@@ -317,8 +351,10 @@
         $('#inputStrings').change(function() {
           if($(this).prop("checked")){
             $("#inputRangeControlGroup").hide();
+            $("#inputStringSizeControlGroup").show();
           } else {
             $("#inputRangeControlGroup").show();
+            $("#inputStringSizeControlGroup").hide();
           }
         });
 
@@ -351,6 +387,18 @@
           </div>
         </div>
         <div class="control-group">
+          <label class="control-label" for="inputMergeSort">Do Merge Sort</label>
+          <div class="controls">
+            <input type="checkbox" id="inputMergeSort">
+          </div>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="inputSelectionSort">Do Selection Sort</label>
+          <div class="controls">
+            <input type="checkbox" id="inputSelectionSort">
+          </div>
+        </div>
+        <div class="control-group">
           <label class="control-label" for="inputSorted">Use Sorted</label>
           <div class="controls">
             <input type="checkbox" id="inputSorted">
@@ -362,10 +410,10 @@
             <input type="checkbox" id="inputStrings">
           </div>
         </div>
-        <div class="control-group">
-          <label class="control-label" for="inputVerify">Verify Sorts</label>
+        <div class="control-group" id="inputStringSizeControlGroup">
+          <label class="control-label" for="inputStringSize">String Size</label>
           <div class="controls">
-            <input type="checkbox" id="inputVerify">
+            <input type="text" id="inputStringSize" class="input-small">
           </div>
         </div>
         <div class="control-group" id="inputRangeControlGroup">
@@ -373,6 +421,12 @@
           <div class="controls">
             <input type="text" id="inputRangeMin" class="input-small"> -
             <input type="text" id="inputRangeMax" class="input-small">
+          </div>
+        </div>
+        <div class="control-group">
+          <label class="control-label" for="inputVerify">Verify Sorts</label>
+          <div class="controls">
+            <input type="checkbox" id="inputVerify">
           </div>
         </div>
         <button class="btn btn-primary btn-large"><i class="icon-random icon-white"></i> Go!</button>
